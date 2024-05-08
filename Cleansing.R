@@ -65,8 +65,7 @@ summary(unclean_data)
 view(unclean_data)
 
 
-
-# Clean Duplications -----------------------------------------------------------
+# Clean Duplication -----------------------------------------------------------
 ## Purpose: there are rows with same link but different keywords => append the keyword together
 sum(duplicated(unclean_data$URL))
 
@@ -109,6 +108,7 @@ df <- df %>% mutate(
 unique(df$count_SocialSciences)
 
 colnames(df)
+view(df)
 
 df$Keyword <- ifelse( df$count_SocialSciences > 1, str_replace_all(df$Keyword, fixed("Social Sciences, Social Sciences"), "Social Sciences"), df$Keyword)
 summary(df)
@@ -121,13 +121,17 @@ df$Keyword <- ifelse(
 unclean_data <- df
 summary(unclean_data)
 
+unique(
+  (unclean_data %>% mutate (
+  count = str_count(Keyword, fixed("Social Sciences"))
+  )
+  )$count)
 
+view(unclean_data)
 
 # Clean specific signs [,],' ---------------------------------------------------
 summary(unclean_data)
 
-unclean_data %>% mutate(count = 
-    str_count())
 ## function to view df better
 view( unclean_data %>% head(10) )
 glimpse(unclean_data %>% head(10))
@@ -158,7 +162,7 @@ summary(unclean_data)
 
 
 # Clean Review -----------------------------------------------------------------
-unclean_data$Review <- str_replace_all(unclean_data$Review, fixed("reviews"), "")
+unclean_data$Review <- str_replace_all(unclean_data$Review, fixed(" reviews"), "")
 view(unclean_data)
 unclean_data$Review <- as.character(unclean_data$Review)
 summary(unclean_data)
@@ -166,61 +170,10 @@ summary(unclean_data)
 
 
 # Clean Duration ---------------------------------------------------------------
-
-# CLEAN APPROXIMATE HOUR    
-duration_col <- unclean_data %>% select(Duration, URL)
-view(duration_col)
-unique(duration_col$Duration)
-rows_approx <- duration_col[which(str_detect(duration_col$Duration, "pprox")),]
-summary(rows_approx)
-view(rows_approx)
-summary(duration_col)
-
-rows_approx1 <- rows_approx
-view(rows_approx1)
-summary(rows_approx1)
-
-unique_duration_values <- unique(rows_approx1$Duration)
-summary(unique_duration_values)
-sum(str_detect(unique_duration_values, "our")) #check if there is row having hour or minutes. result: all have hour
-
-unique_duration_values[which.max(nchar(unique_duration_values))]
-
-which.max(nchar(rows_approx1$Duration))
-
-rows_approx1[which.max(nchar(rows_approx1$Duration)),"Duration"] <- "2" #Replace the string w/o number with number
-
-rows_approx1[2890,]
-
-# Use \\d to check if there is row with only letters
-only_letters_cell <- apply(rows_approx1, 1, function(row) !any(grepl("\\d", row), na.rm = TRUE)) # 1 in apply() means apply according to rows, not columns
-sum(only_letters_cell) # No rows with only letter
-
-test_remove_letter_1 <- str_remove_all(rows_approx1$Duration, "[A-Za-z.() ]")
-view(test_remove_letter_1)
-summary(test_remove_letter_1)
-unique(test_remove_letter_1)
-
-rows_approx1$Duration <- str_remove_all(rows_approx1$Duration, "[A-Za-z.() ]")
-
-unclean_data[which(str_detect(duration_col$Duration, "pprox")),"Duration"] <- rows_approx1$Duration #Paste the clean duration into original df
-unique(unclean_data$Duration)
-
-
-# CLEAN MONTHS & WEEKS - get the rows with month or week in Duration variable
-first_attempt <- unclean_data[which(str_detect(unclean_data$Duration, "month|week")),]
-summary(first_attempt)
-
-second_attempt <- subset(unclean_data, str_detect(unclean_data$Duration, "month|week"))
-summary(second_attempt)
-
-third_attempt <- apply(unclean_data["Duration"],1,function(row) any(grepl("month|week",row, ignore.case = TRUE), na.rm = TRUE))
-summary(third_attempt)
-    # ALL attempts get same number of rows. Only third attempt doesn't return a df
-
-month_week_duration <- unclean_data[which(str_detect(unclean_data$Duration, "month|week")), "Duration"]
-view(month_week_duration)
-unique(month_week_duration)
+## Get a copy version to testing
+sample_df <- unclean_data %>% select(Duration, URL)
+summary(sample_df)
+unique(unclean_data$URL)
 
 
 
