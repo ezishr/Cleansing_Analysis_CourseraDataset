@@ -169,11 +169,92 @@ summary(unclean_data)
 
 
 
-# Clean Duration ---------------------------------------------------------------
+# FINALIZE CLEANSING UNTIL THIS STEP -------------------------------------------
+orig_df <- read.csv("CourseraDataset-Unclean.csv")
+view(orig_df)
+## Set columns name
+orig_df <- rename(orig_df, crs_title = "Course.Title")
+orig_df <- rename(orig_df, will_learn = "What.you.will.learn")
+orig_df <- rename(orig_df, offered = "Offered.By")
+orig_df <- rename(orig_df, URL = "Course.Url")
+orig_df <- rename(orig_df, skill = "Skill.gain")
+colnames(orig_df)
+## Clean NA for Rating col
+clean_NA_func <- function(input_df, colname, replace_value){
+  input_df <- input_df %>% mutate(
+    !!sym(colname) := ifelse(
+      is.na(!!sym(colname)), replace_value, !!sym(colname)
+    )
+  )
+  return(input_df)
+}
+colSums(is.na(orig_df))
+orig_df <- clean_NA_func(orig_df,"Rating", "No information")
+view(orig_df)
+## Clean Empty for Level col
+colSums(orig_df == "")
+clean_empty_func <- function(input_df, colname, replace_value) {
+  input_df <- input_df %>% mutate(
+    !!sym(colname) := ifelse(
+      !!sym(colname) == "", replace_value, !!sym(colname)
+    )
+  )
+}
+orig_df <- clean_empty_func(orig_df, "Level", "No information")
+## Clean duplicated URL
+### Purpose: there are rows with same link but different keywords => append the keyword together
+clean_dup_func <- function(input_df, col_dup, col_append){
+  
+  while( sum( duplicated(input_df[,col_dup] ) ) >= 1){
+    dup_df <- input_df[which( duplicated(input_df[,col_dup]) ),] # get df of duplicated rows of URL
+    link_1st_row <- as.character(dup_df[1, col_dup])
+    row_indices <- as.numeric(which( input_df[,col_dup] == link_1st_row )) # get rows having same links
+    row_indices_without_min <- row_indices[-which.min(row_indices)]
+    
+    for (i in row_indices_without_min){
+      input_df[min(row_indices), col_append] <- paste(
+        input_df[min(row_indices), col_append], input_df[i, col_append], sep = ", "
+      )
+    }
+    input_df <- input_df[-row_indices_without_min,]
+  }
+  
+  return(input_df)
+}
+orig_df <- clean_dup_func(orig_df, "URL", "Keyword")
+summary(orig_df)
+## Clean "Social Sciences" duplication in Keyword col
+orig_df$Keyword <- ifelse(
+  str_count(orig_df$Keyword, fixed("Social Sciences")) > 1, str_replace_all(
+    orig_df$Keyword, fixed("Social Sciences, Social Sciences"), "Social Sciences"
+  ), orig_df$Keyword
+)
+unique(
+  (orig_df %>% mutate(
+  count_ss = str_count(orig_df$Keyword, fixed("Social Sciences")))
+  )$count_ss
+) ###check
+## Clean specific signs [,],'
+clean_sign_func <- function(input_df, colname, sign1, sign2 = "", sign3 = "") {
+  input_df[,colname] <- sapply(input_df[,colname], function(x) {
+    x <- gsub(paste0(fixed(sign1), "|", fixed(sign2), "|", fixed(sign3)), "", x)
+  })
+  return(input_df)
+}
+orig_df <- clean_sign_func(orig_df, "skill", "\\[", "\\]", "'")
+## Clean word "reviews" in Review col
+colnames(orig_df)
+orig_df$Review <- str_replace_all(orig_df$Review, fixed(" reviews"), "")
+
+
+
+# CLEAN DURATION ---------------------------------------------------------------
 ## Get a copy version to testing
-sample_df <- unclean_data %>% select(Duration, URL)
 summary(sample_df)
-unique(unclean_data$URL)
+sample_df <- unclean_data %>% select(Duration, URL)
+view(unclean_data)
+## Get rows having approx words
+approx_rows <- sample_df[which(str_detect(sample_df$Duration, "pprox")),]
 
 
 
