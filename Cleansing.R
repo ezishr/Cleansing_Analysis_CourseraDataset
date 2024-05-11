@@ -190,6 +190,7 @@ clean_NA_func <- function(input_df, colname, replace_value){
 }
 colSums(is.na(orig_df))
 orig_df <- clean_NA_func(orig_df,"Rating", "No information")
+orig_df <- clean_NA_func(orig_df,"Review", 0)
 view(orig_df)
 ## Clean Empty for Level col
 colSums(orig_df == "")
@@ -201,6 +202,13 @@ clean_empty_func <- function(input_df, colname, replace_value) {
   )
 }
 orig_df <- clean_empty_func(orig_df, "Level", "No information")
+orig_df <- clean_empty_func(orig_df, "Review", 0)
+orig_df <- clean_empty_func(orig_df, "Duration", "No information")
+orig_df <- clean_empty_func(orig_df, "Schedule", "No information")
+orig_df <- clean_empty_func(orig_df, "will_learn", "No information")
+orig_df <- clean_empty_func(orig_df, "skill", "No information")
+orig_df <- clean_empty_func(orig_df, "Modules", "No information")
+orig_df <- clean_empty_func(orig_df, "Instructor", "No information")
 ## Clean duplicated URL
 ### Purpose: there are rows with same link but different keywords => append the keyword together
 clean_dup_func <- function(input_df, col_dup, col_append){
@@ -242,20 +250,59 @@ clean_sign_func <- function(input_df, colname, sign1, sign2 = "", sign3 = "") {
   return(input_df)
 }
 orig_df <- clean_sign_func(orig_df, "skill", "\\[", "\\]", "'")
+orig_df <- clean_sign_func(orig_df, "Modules", "\\[", "\\]", "'")
+orig_df <- clean_sign_func(orig_df, "Instructor", "\\[", "\\]", "'")
+orig_df <- clean_sign_func(orig_df, "offered", "\\[", "\\]", "'")
 ## Clean word "reviews" in Review col
 colnames(orig_df)
 orig_df$Review <- str_replace_all(orig_df$Review, fixed(" reviews"), "")
-
-
+## Change type of Review col
+orig_df$Review <- as.double(orig_df$Review)
+summary(orig_df)
 
 # CLEAN DURATION ---------------------------------------------------------------
 ## Get a copy version to testing
-summary(sample_df)
-sample_df <- unclean_data %>% select(Duration, URL)
-view(unclean_data)
+df <- orig_df
+summary(df)
+view(df)
 ## Get rows having approx words
-approx_rows <- sample_df[which(str_detect(sample_df$Duration, "pprox")),]
-
+approx_rows <- df[which(str_detect(df$Duration, "pprox")),c("Duration", "URL")]
+view(approx_rows)
+unique(approx_rows$Duration)
+## Change the longest row to n
+approx_rows[which.max(nchar(approx_rows$Duration)), "Duration"] <- "2 hours"
+## Delete all letter chars in Duration and add word "hours"
+approx_rows[,"Duration"] <- gsub("[^0-9]", "", approx_rows[,"Duration"])
+approx_rows[, "Duration"] <- paste0(approx_rows[,"Duration"], " hours")
+## Add new column named category
+approx_rows <- approx_rows %>% mutate(
+  category = "Approximately"
+)
+## Apply above changes to original df
+matches <- grepl("pprox", df$Duration)
+df[matches, "Duration"] <- approx_rows$Duration
+df <- left_join(df, approx_rows[,c("category", "URL")], by = "URL")
+df <- df[order(df$Duration),]
+view(df)
+unique(df$Duration)
+df[which(df$Duration == "one hour"), "Duration"] <- "1 hour"
+## Get rows having following words: month, week, at
+month_df <- df[which(str_detect(df$Duration, paste0(fixed("month"), "|", fixed("week"), "|", fixed(" at ")))), c("Duration", "URL", "category")]
+view(month_df)
+unique(month_df$Duration)
+month_df[which(month_df$Duration == "1 week of study, 2 hours"), "category"] <- "Hours"
+month_df[which(month_df$Duration == "1 week of study, 2 hours"), "Duration"] <- "14 hours"
+summary(month_df)
+month_df[which(str_detect(month_df$Duration, fixed("month"))), "Duration"] <- gsub(" month.*", "", month_df[which(str_detect(month_df$Duration, fixed("month"))), "Duration"])
+unique(month_df$Duration)
+month_df[which(!str_detect(month_df$Duration, fixed("hours"))),"Duration"] <- paste0(month_df[which(!str_detect(month_df$Duration, fixed("hours"))), "Duration"], " months")
+month_df[which(month_df$Duration == "1 months"), "Duration"] <- "1 month"
+view(month_df)
+matching <- grepl(paste0(fixed("month"), "|", fixed("week"), "|", fixed(" at ")), df$Duration)
+df[matching, "Duration"] <- month_df$Duration
+unique(df$category)
+view(df[which(str_detect(df$Duration, fixed("month"))),])
+df[which(str_detect(df$Duration, fixed("month"))), "category"] <- "Months"
 
 
 
