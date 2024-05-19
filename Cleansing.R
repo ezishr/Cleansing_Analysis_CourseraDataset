@@ -338,25 +338,21 @@ view(table(df$category))
 
 
 # Visualization: number of courses vs. rating-----------------------------------
-df_rating <- as.data.frame(count(df, Rating))
-class(df_rating)
-typeof(df_rating)
-view(df_rating)
-summary(df_rating)
-typeof(df_rating$Rating)
 ranges <- c(0, 1.0, 2.0, 3.0, 4.0, 5.1)
-df_rating$ranges <- cut(df_rating$Rating, breaks = ranges, labels = c("0-1.0", "1.1-2.0", "2.1-3.0", "3.1-4.0", "4.1-5.0"), right = TRUE)
-view(df_rating)
-
 df$ranges <- cut(df$Rating, breaks = ranges, labels = c("0-1.0", "1.1-2.0", "2.1-3.0", "3.1-4.0", "4.1-5.0"), right = FALSE)
 df %>% select(ranges, Rating) %>% head()
+df[which(is.na(df$Review)), "Review"] <- 0
+view(df)
 df_rating <- as.data.frame(count(df, ranges))
 view(df_rating)
-df %>% select(ranges, Rating) %>% arrange(Rating)
-df %>% filter(ranges=="1.1-2.0") %>% select(ranges, Rating) %>% arrange(Rating) %>% head()
-max(df$Rating)
-summary(df)
-view(df)
-colSums(is.na(df))
-df[which(is.na(df$Review)), "Review"] <- 0
+rating_visual <- ggplot(df_rating, aes(x=ranges, y=n, fill = ranges)) + geom_col() + labs(x = "Rating ranges", y = "Courses", fill="Rating ranges") + ggtitle("Course vs. Rating")
+ggsave("rating_visual.png", rating_visual)
 save(df, file = "my_df.RData")
+
+
+# Visualization: number of course vs. level 
+view(df)
+level_visual <- ggplot(df, aes(x=Level, fill = Level)) + geom_bar() + labs(y="Course count") + ggtitle("Courses vs. Level")
+ggsave("level_visual.png", level_visual)
+
+
