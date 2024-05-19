@@ -171,7 +171,6 @@ summary(unclean_data)
 
 # FINALIZE CLEANSING UNTIL THIS STEP -------------------------------------------
 orig_df <- read.csv("CourseraDataset-Unclean.csv")
-view(orig_df)
 ## Set columns name
 orig_df <- rename(orig_df, crs_title = "Course.Title")
 orig_df <- rename(orig_df, will_learn = "What.you.will.learn")
@@ -259,7 +258,7 @@ orig_df$Review <- str_replace_all(orig_df$Review, fixed(" reviews"), "")
 ## Change type of Review col
 orig_df$Review <- as.double(orig_df$Review)
 summary(orig_df)
-
+view(orig_df)
 # CLEAN DURATION ---------------------------------------------------------------
 ## Get a copy version to testing
 df <- orig_df
@@ -303,7 +302,61 @@ df[matching, "Duration"] <- month_df$Duration
 unique(df$category)
 view(df[which(str_detect(df$Duration, fixed("month"))),])
 df[which(str_detect(df$Duration, fixed("month"))), "category"] <- "Months"
+view(df)
+view(unique(df$Duration))
+## Get rows having "mins" "minutes"
+mins_df <- df[which(str_detect(
+  df$Duration, paste0(fixed("min"))
+)),c("Duration", "URL")]
+view(unique(mins_df$Duration))
+view(mins_df)
+mins_df[which(mins_df$Duration == "1 hour 10 mins"), "Duration"] <- "1.16 hours"
+mins_df[which(mins_df$Duration == "1 hour 15 mins" | mins_df$Duration == "1 hour 15 minutes"), "Duration"] <- "1.25 hours"
+mins_df[which(mins_df$Duration == "1 hour and 20 minutes"), "Duration"] <- "1.33 hours"
+mins_df[which(mins_df$Duration == "2 hours 30 mins"), "Duration"] <- "2.5 hours"
+### Apply changes to original dataset
+matching_min <- grepl(paste0(fixed("min")), df$Duration)
+df[matching_min, "Duration"] <- mins_df$Duration
+view(unique(df[,c("Duration", "category")]))
+df %>% filter(is.na(category)) %>% select(Duration, category)
+df[which(df$Duration == "No information"), "category"] <- "No information"
+df[which(is.na(df$category) & str_detect(df$Duration, fixed("hour"))), "category"] <- "Hours"
+view(unique(df$category))
+view(df %>% select(Duration, category))
+sum(is.na(df$category))
+summary(df)
+colSums(is.na(df))
+colSums(df == "")
+sum(unique(df$URL))
+view(df %>% select(Modules, Instructor, skill))
+view(df)
+unique(df$Modules)
+
+df[which(df$Rating == "No information"), "Rating"] <- 0
+df$Rating <- as.double(df$Rating)
+view(table(df$category))
 
 
+# Visualization: number of courses vs. rating-----------------------------------
+df_rating <- as.data.frame(count(df, Rating))
+class(df_rating)
+typeof(df_rating)
+view(df_rating)
+summary(df_rating)
+typeof(df_rating$Rating)
+ranges <- c(0, 1.0, 2.0, 3.0, 4.0, 5.1)
+df_rating$ranges <- cut(df_rating$Rating, breaks = ranges, labels = c("0-1.0", "1.1-2.0", "2.1-3.0", "3.1-4.0", "4.1-5.0"), right = TRUE)
+view(df_rating)
 
-
+df$ranges <- cut(df$Rating, breaks = ranges, labels = c("0-1.0", "1.1-2.0", "2.1-3.0", "3.1-4.0", "4.1-5.0"), right = FALSE)
+df %>% select(ranges, Rating) %>% head()
+df_rating <- as.data.frame(count(df, ranges))
+view(df_rating)
+df %>% select(ranges, Rating) %>% arrange(Rating)
+df %>% filter(ranges=="1.1-2.0") %>% select(ranges, Rating) %>% arrange(Rating) %>% head()
+max(df$Rating)
+summary(df)
+view(df)
+colSums(is.na(df))
+df[which(is.na(df$Review)), "Review"] <- 0
+save(df, file = "my_df.RData")
