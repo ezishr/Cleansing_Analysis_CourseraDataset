@@ -390,6 +390,12 @@ ggplot(sample, aes(x = offered, y = n, fill = offered)) +
 # Duration Calculation ---------------------------------------------------------
 df2 <- df
 
+for (col_name in colnames(df2)){
+  df2[[col_name]] <- trimws(df2[[col_name]])
+}
+
+df2 <- clean_sign_func(df2, 'Duration', ',')
+df2 <- clean_sign_func(df2, 'Duration', 'and ')
 
 
 
