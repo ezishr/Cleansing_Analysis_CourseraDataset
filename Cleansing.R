@@ -380,11 +380,15 @@ level_visual <- ggplot(df, aes(x = Level, fill = Level)) +
   ggtitle("Courses vs. Level")
 ggsave("level_visual.png", level_visual)
 
-# Visualization: Count of offered ------------------
-ggplot(, aes(x=offered, y=n, fill = offered)) +
-  geom_col()
-sample <- as.data.frame(count(df, offered))
-view(sample)
+# Visualization: Count of offered ----------------------------------------------
+sample <- df %>% count(offered) %>% arrange(desc(n)) %>% head(5)
+ggplot(sample, aes(x = offered, y = n, fill = offered)) +
+  geom_col() + 
+  ggtitle('Top 5 Sources Offering') + 
+  labs(x = 'Source Offer', y = 'Count', fill = 'Source Offer')
+  
+# Duration Calculation ---------------------------------------------------------
+df2 <- df
 
 
 
