@@ -373,9 +373,13 @@ save(df, file = "my_df.RData")
 
 
 # Visualization: number of course vs. level-------------------------------------
-view(df)
-level_visual <- ggplot(df, aes(x = Level, fill = Level)) +
-  geom_bar() +
+df_count <- df %>% count(Level)
+df_count <- df_count %>% mutate(
+  Level = reorder(Level, -n)
+)
+
+level_visual <- ggplot(df_count, aes(x = Level, y=n, fill = Level)) +
+  geom_bar(stat='identity') +
   labs(y = "Course count") +
   ggtitle("Courses vs. Level")
 ggsave("level_visual.png", level_visual)
@@ -398,11 +402,58 @@ df2 <- clean_sign_func(df2, 'Duration', ',')
 df2 <- clean_sign_func(df2, 'Duration', 'and ')
 
 
+total_duration <- function(value){
+  if(value != 'No information'){
+    
+    hours <- as.numeric((
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+hours?\\b)")
+    ))
+    
+    minutes <- as.numeric((
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+minutes?\\b)")
+    ))
+    
+    months <- as.numeric((
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+months?\\b)")
+    ))
+    
+    hours <- ifelse(is.na(hours),0,hours)
+    minutes <- ifelse(is.na(minutes),0,minutes)
+    months <- ifelse(is.na(months),0,months)
+    
+    total_hours <- hours + minutes/60 + months*720
+  } else {return(0)}
+  
+  return(round(total_hours,2))
+}
+
+df2 <- df2 %>% mutate(
+  hours_spent = sapply(Duration,total_duration)
+)
 
 
+average_time_df <- df2 %>% group_by(Level) %>%
+  summarize(average_time = mean(hours_spent))
+average_time_level <- ggplot(average_time_df, aes(x=Level, y=average_time, fill=Level)) +
+  geom_col() + 
+  labs(title='Average Time Spent for a Course by Level', y='Average Time')
 
+df_count <- df2 %>% count(Level, ranges)
+level_ranges_wideFormat <- dcast(df_count, Level ~ ranges, value.var = 'n')
+level_ranges_matrix <- as.matrix(level_ranges_wideFormat[,-1])
+rownames(level_ranges_matrix) <- level_ranges_wideFormat$Level
+level_ranges_matrix <- melt(level_ranges_matrix, varnames=c("Level","Ranges"), value.name = 'Count')
 
+level_ratingRanges <- ggplot(level_ranges_matrix, aes(x=Level, y=Ranges, fill=Count)) +
+  geom_tile() +
+  geom_text(aes(label=Count), color='black') +
+  scale_fill_gradient(low='lightblue', high='blue', na.value='white') +
+  labs(y='Rating Ranges', title='Distribution of Courses by Level and Rating Ranges')
 
+# sample <- df %>% count(Level, ranges)
+# ggplot(sample, aes(x=Level, y=ranges, fill=n)) + 
+  # geom_tile() + 
+  # scale_fill_gradient(low='pink', high='blue', na.value = 'red')
 
 
 
