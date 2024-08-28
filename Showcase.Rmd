@@ -2,29 +2,133 @@
 title: "Coursera Data Analysis"
 author: "Eirlys Vo"
 date: "2024-08-28"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::clean_cache()
 ```
 
-## R Markdown
+## Objective
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+The goal of this project is to perform a comprehensive analysis of a dataset related to Coursera courses. I explored the dataset to understand the data structure and performed necessary data cleansing. Then, I created visualizations to see insights for online studying trends and user engagement.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+## Data Collection
 
-```{r cars}
-summary(cars)
+The data is provided on Kaggle, which can be viewed [here.](https://www.kaggle.com/datasets/elvinrustam/coursera-dataset)
+
+There are two datasets which are cleaned and uncleaned. For this project, I will only use the uncleaned version since our aim includes data cleansing. The dataset includes various columns which are basic information about a course. I will use `URL` link as our main unique index, which I will also clean on this in the **Project Workflow** section.
+
+Further dataset description can be read [here.](https://www.kaggle.com/datasets/elvinrustam/coursera-dataset)
+
+First, I will read the dataset using `read.csv` function, save as `unclean_data`, and see an overview of the dataset:
+
+```{r}
+orig_df <- read.csv("CourseraDataset-Unclean.csv")
+summary(orig_df)
+colnames(orig_df)
 ```
 
-## Including Plots
+## Libraries and Tools
 
-You can also embed plots, for example:
+I will set up necessary libraries that can help me clean and visualize data in further steps:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+library(tidyverse)
+library(zoo)
+library(textcat)
+sessionInfo()
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Project Workflow
+
+### 1. Set columns name
+
+The dataset has some columns' names which I find them hard to use throughout the workflow. Therefore, I would rather change them into easily accessible names. I will use the `rename` function to apply new columns' names:
+
+```{r}
+orig_df <- rename(orig_df, crs_title = "Course.Title")
+orig_df <- rename(orig_df, will_learn = "What.you.will.learn")
+orig_df <- rename(orig_df, offered = "Offered.By")
+orig_df <- rename(orig_df, URL = "Course.Url")
+orig_df <- rename(orig_df, skill = "Skill.gain")
+
+data_types <- sapply(orig_df, typeof)
+results <- paste(names(orig_df), ":", data_types, collapse = ", ")
+cat(results,'\n')
+```
+
+We want to use function `head()` to see the format of data in every column:
+
+```{r}
+head(orig_df)
+```
+
+### 2. Cleansing N/A values for Rating col
+
+In cleansing process, I first want to see the amount of N/A values in every column:
+
+```{r}
+colSums(is.na(orig_df))
+```
+
+There are about 1500 `N/A` values for column `Rating`. The `Rating` column has format of `double` so to be easy, we can fill `N/A` with 0.
+
+In case we need to clean any sudden `N/A` in the future (if having additional column), it would be better to create a custom function to help us handle this. The function will need inputs of a data frame, column's name need to be cleansed, and the replaced value for it.
+
+We use `mutate()` to easily access the data frame and its columns. Then, we use `sym()` function to converts the column name from a string to a symbol since our input `colname` of the function is a string and `mutate()` can't handle string. We need `!!` before it to unquote the `sym()` function.
+
+Then, we have the `ifelse` to check a value is `N/A`:
+
+```{r}
+clean_NA_func <- function(input_df, colname, replace_value) {
+  input_df <- input_df %>% mutate(
+    !!sym(colname) := ifelse(
+      is.na(!!sym(colname)), replace_value, !!sym(colname)
+    )
+  )
+  return(input_df)
+}
+```
+
+We now apply this function to clean the `Rating` column and check again:
+
+```{r}
+orig_df <- clean_NA_func(orig_df, "Rating", 0)
+colSums(is.na(orig_df))
+```
+
+### Cleaning duplicated URL link
+
+As mentioned in **Objective**, we use URL link as our main index, so we need to clean the duplicated link. Purpose: there are rows with same link but different keywords =\> append the keyword together
+
+```{r}
+
+sum(duplicated(orig_df$URL))
+
+clean_dup_func <- function(input_df, col_dup, col_append) {
+  while (sum(duplicated(input_df[, col_dup])) >= 1) {
+    dup_df <- input_df[which(duplicated(input_df[, col_dup])), ] # get df of duplicated rows of URL
+    link_1st_row <- as.character(dup_df[1, col_dup])
+    row_indices <- as.numeric(which(input_df[, col_dup] == link_1st_row)) # get rows having same links
+    row_indices_without_min <- row_indices[-which.min(row_indices)]
+
+    for (i in row_indices_without_min) {
+      input_df[min(row_indices), col_append] <- paste(
+        input_df[min(row_indices), col_append], input_df[i, col_append],
+        sep = ", "
+      )
+    }
+    input_df <- input_df[-row_indices_without_min, ]
+  }
+
+  return(input_df)
+}
+orig_df <- clean_dup_func(orig_df, "URL", "Keyword")
+summary(orig_df)
+```
+
+## Improvements to make
