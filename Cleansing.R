@@ -2,7 +2,6 @@
 sessionInfo()
 library(tidyverse)
 library(zoo)
-install.packages("textcat")
 library(textcat)
 getwd()
 list.files(getwd())
