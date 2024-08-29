@@ -4,7 +4,6 @@ author: "Eirlys Vo"
 date: "2024-08-28"
 output:
   html_document: default
-  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -40,6 +39,7 @@ I will set up necessary libraries that can help me clean and visualize data in f
 library(tidyverse)
 library(zoo)
 library(textcat)
+library(conflicted)
 sessionInfo()
 ```
 
