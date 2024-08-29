@@ -39,7 +39,6 @@ I will set up necessary libraries that can help me clean and visualize data in f
 library(tidyverse)
 library(zoo)
 library(textcat)
-library(conflicted)
 sessionInfo()
 ```
 
@@ -101,9 +100,44 @@ orig_df <- clean_NA_func(orig_df, "Rating", 0)
 colSums(is.na(orig_df))
 ```
 
-### Cleaning duplicated URL link
+### 3. Cleansing empty values for Level column
 
-As mentioned in **Objective**, we use URL link as our main index, so we need to clean the duplicated link. Purpose: there are rows with same link but different keywords =\> append the keyword together
+There are some entries that are not identified as `N/A` but empty. We want to build a function that helps fill those empty entries with desired values. The logic behind this function is similar to the `clean_NA_func`, but we replace the condition checking `is.na` with `== ""`.
+
+```{r}
+colSums(orig_df == "")
+clean_empty_func <- function(input_df, colname, replace_value) {
+  input_df <- input_df %>% mutate(
+    !!sym(colname) := ifelse(
+      !!sym(colname) == "", replace_value, !!sym(colname)
+    )
+  )
+}
+```
+
+There are number of columns with empty entries. Depending on each column data structure, we fill the empty with different values.
+
+```{r}
+columns_to_clean = c('Level','Duration','Schedule','will_learn','skill','Modules','Instructor')
+
+for (col in columns_to_clean) {
+  orig_df <- clean_empty_func(orig_df, col, 'No information')
+}
+
+colSums(orig_df=="")
+```
+
+For `Review` column specifically, since there is `reviews` in the entries, we will remove this word (using `str_replace_all`), fill the empty ones with 0, and then convert the data back to `double` type for further analysis purpose.
+
+```{r}
+orig_df$Review <- str_replace_all(orig_df$Review, fixed(" reviews"), "")
+orig_df <- clean_empty_func(orig_df, 'Review', '0')
+orig_df$Review <- as.double(orig_df$Review)
+```
+
+### 4. Cleaning duplicated URL link
+
+As mentioned in **Objective**, we use URL link as our main index, so we need to clean the duplicated link. Also, there are rows with same link but different keywords so we want to append the keywords together. The logic behind this function is to use the `while` loop to continuously track the existing of duplication. We want to save the indices of duplicated URL rows, pasting the keywords of larger indices rows to the minimum one and then remove those bigger indices rows.
 
 ```{r}
 
@@ -111,6 +145,7 @@ sum(duplicated(orig_df$URL))
 
 clean_dup_func <- function(input_df, col_dup, col_append) {
   while (sum(duplicated(input_df[, col_dup])) >= 1) {
+    
     dup_df <- input_df[which(duplicated(input_df[, col_dup])), ] # get df of duplicated rows of URL
     link_1st_row <- as.character(dup_df[1, col_dup])
     row_indices <- as.numeric(which(input_df[, col_dup] == link_1st_row)) # get rows having same links
@@ -122,13 +157,83 @@ clean_dup_func <- function(input_df, col_dup, col_append) {
         sep = ", "
       )
     }
+    
     input_df <- input_df[-row_indices_without_min, ]
+    
   }
 
   return(input_df)
 }
+
 orig_df <- clean_dup_func(orig_df, "URL", "Keyword")
 summary(orig_df)
 ```
+
+### 5. Cleaning ***Social Sciences*** duplication in Keyword column
+
+After we perform the fourth cleaning, there seems to be duplicated `Social Sciences` keyword and we don't want that. At this step, we don't build a custom function here. Instead, we directly replace any row having more than 1 `Social Sciences` keyword with single term. We perform that with functions `str_count` for counting purpose and `str_replace_all` for replacing purpose.
+
+```{r}
+orig_df$Keyword <- ifelse(
+  str_count(orig_df$Keyword, fixed("Social Sciences")) > 1, str_replace_all(
+    orig_df$Keyword, fixed("Social Sciences, Social Sciences"), "Social Sciences"
+  ), orig_df$Keyword
+)
+
+unique(
+  (orig_df %>% mutate(
+    count_ss = str_count(orig_df$Keyword, fixed("Social Sciences"))
+  )
+  )$count_ss
+)
+```
+
+After performing replacement, we can see that now every row only has 0 or 1 keyword `Social Sciences` and this is desirable.
+
+### 6. Cleaning specific signs ***[,],'***
+
+When viewing the data set, there are columns skill, Modules, Instructor, offered having specific signs in their values. We want to get rid of these for consistent data purpose. Since there are different signs, we want to build a custom function for different inputs purpose. The logic behind this custom function is similar to the others created above, but we have placeholder for `sign2` and `sign3` inputs since we are not sure how many signs we will have and use function `gsub` for matching and replacement.
+
+```{r}
+head(orig_df)
+
+clean_sign_func <- function(input_df, colname, sign1, sign2 = "", sign3 = "") {
+  input_df[, colname] <- sapply(input_df[, colname], function(x) {
+    x <- gsub(paste0(fixed(sign1), "|", fixed(sign2), "|", fixed(sign3)), "", x)
+  })
+  return(input_df)
+}
+
+# Apply function
+orig_df <- clean_sign_func(orig_df, "skill", "\\[", "\\]", "'")
+orig_df <- clean_sign_func(orig_df, "Modules", "\\[", "\\]", "'")
+orig_df <- clean_sign_func(orig_df, "Instructor", "\\[", "\\]", "'")
+orig_df <- clean_sign_func(orig_df, "offered", "\\[", "\\]", "'")
+```
+
+After removing signs, there are empty entries so we will use `clean_empty_func`:
+
+```{r}
+
+```
+
+### 7. Cleaning ***Duration*** column
+
+Having a look at `Duration` column, we see there is inconsistency how data is structure. Therefore, we will change these into single unit `hour`.
+
+```{r}
+orig_df %>% head(20) %>% select(Duration)
+```
+
+Have a look at unique values for `Duration`:
+
+```{r}
+unique(orig_df$Duration)
+```
+
+We can see that there are empty ones, `approx` or `approximately`, `hours`, `minutes`, `week`, and `month`. There is one entry with a full sentence, which is the longest entry. There is entry with `one hour` which does not use digit but letters. Steps to clean include:
+
+-   Replace the longest one with a correct one with function `which.max`
+-   Replace the letters but not digit with a correct one with `which` to find the row index
 
 ## Improvements to make

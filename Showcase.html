@@ -426,7 +426,6 @@ visualize data in further steps:</p>
 <pre class="r"><code>library(tidyverse)
 library(zoo)
 library(textcat)
-library(conflicted)
 sessionInfo()</code></pre>
 <pre><code>## R version 4.4.1 (2024-06-14)
 ## Platform: aarch64-apple-darwin20
@@ -446,10 +445,9 @@ sessionInfo()</code></pre>
 ## [1] graphics  grDevices utils     datasets  stats     methods   base     
 ## 
 ## other attached packages:
-##  [1] conflicted_1.2.0 textcat_1.0-8    zoo_1.8-12       lubridate_1.9.3 
-##  [5] forcats_1.0.0    stringr_1.5.1    dplyr_1.1.4      purrr_1.0.2     
-##  [9] readr_2.1.5      tidyr_1.3.1      tibble_3.2.1     ggplot2_3.5.1   
-## [13] tidyverse_2.0.0 
+##  [1] textcat_1.0-8   zoo_1.8-12      lubridate_1.9.3 forcats_1.0.0  
+##  [5] stringr_1.5.1   dplyr_1.1.4     purrr_1.0.2     readr_2.1.5    
+##  [9] tidyr_1.3.1     tibble_3.2.1    ggplot2_3.5.1   tidyverse_2.0.0
 ## 
 ## loaded via a namespace (and not attached):
 ##  [1] sass_0.4.9        utf8_1.2.4        generics_0.1.3    slam_0.1-52      
@@ -458,11 +456,11 @@ sessionInfo()</code></pre>
 ## [13] fastmap_1.2.0     jsonlite_1.8.8    fansi_1.0.6       scales_1.3.0     
 ## [17] jquerylib_0.1.4   cli_3.6.3         rlang_1.1.4       munsell_0.5.1    
 ## [21] withr_3.0.1       cachem_1.1.0      yaml_2.3.10       tools_4.4.1      
-## [25] tzdb_0.4.0        memoise_2.0.1     colorspace_2.1-1  vctrs_0.6.5      
-## [29] R6_2.5.1          lifecycle_1.0.4   pkgconfig_2.0.3   pillar_1.9.0     
-## [33] bslib_0.8.0       gtable_0.3.5      glue_1.7.0        xfun_0.47        
-## [37] tidyselect_1.2.1  tau_0.0-25        rstudioapi_0.16.0 knitr_1.48       
-## [41] htmltools_0.5.8.1 rmarkdown_2.28    compiler_4.4.1</code></pre>
+## [25] tzdb_0.4.0        colorspace_2.1-1  vctrs_0.6.5       R6_2.5.1         
+## [29] lifecycle_1.0.4   pkgconfig_2.0.3   pillar_1.9.0      bslib_0.8.0      
+## [33] gtable_0.3.5      glue_1.7.0        xfun_0.47         tidyselect_1.2.1 
+## [37] tau_0.0-25        rstudioapi_0.16.0 knitr_1.48        htmltools_0.5.8.1
+## [41] rmarkdown_2.28    compiler_4.4.1</code></pre>
 </div>
 <div id="project-workflow" class="section level2">
 <h2>Project Workflow</h2>
@@ -585,16 +583,63 @@ colSums(is.na(orig_df))</code></pre>
 ##      skill    Modules Instructor    offered    Keyword        URL 
 ##          0          0          0          0          0          0</code></pre>
 </div>
+<div id="cleansing-empty-values-for-level-column" class="section level3">
+<h3>3. Cleansing empty values for Level column</h3>
+<p>There are some entries that are not identified as <code>N/A</code>
+but empty. We want to build a function that helps fill those empty
+entries with desired values. The logic behind this function is similar
+to the <code>clean_NA_func</code>, but we replace the condition checking
+<code>is.na</code> with <code>== &quot;&quot;</code>.</p>
+<pre class="r"><code>colSums(orig_df == &quot;&quot;)</code></pre>
+<pre><code>##  crs_title     Rating      Level   Duration   Schedule     Review will_learn 
+##          0          0       1265        262        683       1443       4611 
+##      skill    Modules Instructor    offered    Keyword        URL 
+##          0          0          0          0          0          0</code></pre>
+<pre class="r"><code>clean_empty_func &lt;- function(input_df, colname, replace_value) {
+  input_df &lt;- input_df %&gt;% mutate(
+    !!sym(colname) := ifelse(
+      !!sym(colname) == &quot;&quot;, replace_value, !!sym(colname)
+    )
+  )
+}</code></pre>
+<p>There are number of columns with empty entries. Depending on each
+column data structure, we fill the empty with different values.</p>
+<pre class="r"><code>columns_to_clean = c(&#39;Level&#39;,&#39;Duration&#39;,&#39;Schedule&#39;,&#39;will_learn&#39;,&#39;skill&#39;,&#39;Modules&#39;,&#39;Instructor&#39;)
+
+for (col in columns_to_clean) {
+  orig_df &lt;- clean_empty_func(orig_df, col, &#39;No information&#39;)
+}
+
+colSums(orig_df==&quot;&quot;)</code></pre>
+<pre><code>##  crs_title     Rating      Level   Duration   Schedule     Review will_learn 
+##          0          0          0          0          0       1443          0 
+##      skill    Modules Instructor    offered    Keyword        URL 
+##          0          0          0          0          0          0</code></pre>
+<p>For <code>Review</code> column specifically, since there is
+<code>reviews</code> in the entries, we will remove this word (using
+<code>str_replace_all</code>), fill the empty ones with 0, and then
+convert the data back to <code>double</code> type for further analysis
+purpose.</p>
+<pre class="r"><code>orig_df$Review &lt;- str_replace_all(orig_df$Review, fixed(&quot; reviews&quot;), &quot;&quot;)
+orig_df &lt;- clean_empty_func(orig_df, &#39;Review&#39;, &#39;0&#39;)
+orig_df$Review &lt;- as.double(orig_df$Review)</code></pre>
+<pre><code>## Warning: NAs introduced by coercion</code></pre>
+</div>
 <div id="cleaning-duplicated-url-link" class="section level3">
-<h3>Cleaning duplicated URL link</h3>
+<h3>4. Cleaning duplicated URL link</h3>
 <p>As mentioned in <strong>Objective</strong>, we use URL link as our
-main index, so we need to clean the duplicated link. Purpose: there are
-rows with same link but different keywords =&gt; append the keyword
-together</p>
+main index, so we need to clean the duplicated link. Also, there are
+rows with same link but different keywords so we want to append the
+keywords together. The logic behind this function is to use the
+<code>while</code> loop to continuously track the existing of
+duplication. We want to save the indices of duplicated URL rows, pasting
+the keywords of larger indices rows to the minimum one and then remove
+those bigger indices rows.</p>
 <pre class="r"><code>sum(duplicated(orig_df$URL))</code></pre>
 <pre><code>## [1] 3191</code></pre>
 <pre class="r"><code>clean_dup_func &lt;- function(input_df, col_dup, col_append) {
   while (sum(duplicated(input_df[, col_dup])) &gt;= 1) {
+    
     dup_df &lt;- input_df[which(duplicated(input_df[, col_dup])), ] # get df of duplicated rows of URL
     link_1st_row &lt;- as.character(dup_df[1, col_dup])
     row_indices &lt;- as.numeric(which(input_df[, col_dup] == link_1st_row)) # get rows having same links
@@ -606,11 +651,14 @@ together</p>
         sep = &quot;, &quot;
       )
     }
+    
     input_df &lt;- input_df[-row_indices_without_min, ]
+    
   }
 
   return(input_df)
 }
+
 orig_df &lt;- clean_dup_func(orig_df, &quot;URL&quot;, &quot;Keyword&quot;)
 summary(orig_df)</code></pre>
 <pre><code>##   crs_title             Rating         Level             Duration        
@@ -620,17 +668,20 @@ summary(orig_df)</code></pre>
 ##                     Mean   :3.739                                        
 ##                     3rd Qu.:4.800                                        
 ##                     Max.   :5.000                                        
-##    Schedule            Review           will_learn           skill          
-##  Length:6404        Length:6404        Length:6404        Length:6404       
-##  Class :character   Class :character   Class :character   Class :character  
-##  Mode  :character   Mode  :character   Mode  :character   Mode  :character  
-##                                                                             
-##                                                                             
-##                                                                             
+##                                                                          
+##    Schedule             Review       will_learn           skill          
+##  Length:6404        Min.   :  0.0   Length:6404        Length:6404       
+##  Class :character   1st Qu.: 10.0   Class :character   Class :character  
+##  Mode  :character   Median : 59.0   Mode  :character   Mode  :character  
+##                     Mean   :168.8                                        
+##                     3rd Qu.:244.0                                        
+##                     Max.   :998.0                                        
+##                     NA&#39;s   :1173                                         
 ##    Modules           Instructor          offered            Keyword         
 ##  Length:6404        Length:6404        Length:6404        Length:6404       
 ##  Class :character   Class :character   Class :character   Class :character  
 ##  Mode  :character   Mode  :character   Mode  :character   Mode  :character  
+##                                                                             
 ##                                                                             
 ##                                                                             
 ##                                                                             
@@ -640,7 +691,375 @@ summary(orig_df)</code></pre>
 ##  Mode  :character  
 ##                    
 ##                    
+##                    
 ## </code></pre>
+</div>
+<div id="cleaning-social-sciences-duplication-in-keyword-column" class="section level3">
+<h3>5. Cleaning <strong><em>Social Sciences</em></strong> duplication in
+Keyword column</h3>
+<p>After we perform the fourth cleaning, there seems to be duplicated
+<code>Social Sciences</code> keyword and we don’t want that. At this
+step, we don’t build a custom function here. Instead, we directly
+replace any row having more than 1 <code>Social Sciences</code> keyword
+with single term. We perform that with functions <code>str_count</code>
+for counting purpose and <code>str_replace_all</code> for replacing
+purpose.</p>
+<pre class="r"><code>orig_df$Keyword &lt;- ifelse(
+  str_count(orig_df$Keyword, fixed(&quot;Social Sciences&quot;)) &gt; 1, str_replace_all(
+    orig_df$Keyword, fixed(&quot;Social Sciences, Social Sciences&quot;), &quot;Social Sciences&quot;
+  ), orig_df$Keyword
+)
+
+unique(
+  (orig_df %&gt;% mutate(
+    count_ss = str_count(orig_df$Keyword, fixed(&quot;Social Sciences&quot;))
+  )
+  )$count_ss
+)</code></pre>
+<pre><code>## [1] 0 1</code></pre>
+<p>After performing replacement, we can see that now every row only has
+0 or 1 keyword <code>Social Sciences</code> and this is desirable.</p>
+</div>
+<div id="cleaning-specific-signs" class="section level3">
+<h3>6. Cleaning specific signs <strong><em>[,],’</em></strong></h3>
+<p>When viewing the data set, there are columns skill, Modules,
+Instructor, offered having specific signs in their values. We want to
+get rid of these for consistent data purpose. Since there are different
+signs, we want to build a custom function for different inputs purpose.
+The logic behind this custom function is similar to the others created
+above, but we have placeholder for <code>sign2</code> and
+<code>sign3</code> inputs since we are not sure how many signs we will
+have and use function <code>gsub</code> for matching and
+replacement.</p>
+<pre class="r"><code>head(orig_df)</code></pre>
+<pre><code>##                                                      crs_title Rating
+## 1                                            Fashion as Design    4.8
+## 2                                       Modern American Poetry    4.4
+## 3                                    Pixel Art for Video Games    4.5
+## 4              Distribución digital de la música independiente    0.0
+## 5 The Blues: Understanding and Performing an American Art Form    4.8
+## 6                                 So You Think You Know Tango?    4.6
+##            Level                     Duration          Schedule Review
+## 1 Beginner level     20 hours (approximately) Flexible schedule     NA
+## 2 Beginner level Approx. 34 hours to complete Flexible schedule    100
+## 3 Beginner level      9 hours (approximately) Flexible schedule    227
+## 4 Beginner level  Approx. 8 hours to complete Flexible schedule      0
+## 5 Beginner level Approx. 11 hours to complete Flexible schedule    582
+## 6 Beginner level  Approx. 5 hours to complete Flexible schedule    107
+##                                                                                                                                                                                                                                                                 will_learn
+## 1                                                                                                                                                                                                                                                           No information
+## 2                                                                                                                                                                                                                                                           No information
+## 3                                                                                                                                                                                                                                                           No information
+## 4                                                                                                                                                                                                                                                           No information
+## 5                                                                                                       Students will be able to describe the blues as an important musical form. Students will be able to explain differences in jazz and other variations of the blues. 
+## 6 Gain an appreciation for the Argentine Tango as a multidimensional art form, including music, dance, and poetry.List the components that make a tango.Eexplore the tango as a living art form today and how it can be used to cross cultural boundaries and stereotypes.
+##                                              skill
+## 1  [&#39;Art History&#39;, &#39;Art&#39;, &#39;History&#39;, &#39;Creativity&#39;]
+## 2                                               []
+## 3                                               []
+## 4                                               []
+## 5 [&#39;Music&#39;, &#39;Chord&#39;, &#39;Jazz&#39;, &#39;Jazz Improvisation&#39;]
+## 6                                               []
+##                                                                                                                                                                                                                               Modules
+## 1                                                                                                                                         [&#39;Introduction&#39;, &#39;Heroes&#39;, &#39;Silhouettes&#39;, &#39;Coutures&#39;, &#39;Lifecycle&#39;, &#39;Modesty&#39;, &#39;Expression&#39;]
+## 2                                                                                                                                                                     [&#39;Orientation&#39;, &#39;Module 1&#39;, &#39;Module 2&#39;, &#39;Module 3&#39;, &#39;Module 4&#39;]
+## 3                                                                 [&#39;Week 1: Introduction to Pixel Art&#39;, &#39;Week 2: Pixel Art Environments&#39;, &#39;Week 3: Pixel Art Characters&#39;, &#39;Week 4: Pixel Art Animation&#39;, &#39;Week 5: Pixel Art Project&#39;]
+## 4                                                                                                                                                                                    [&#39;Semana 1&#39;, &#39;Semana 2&#39;, &#39;Semana 3&#39;, &#39;Semana 4&#39;]
+## 5 [&#39;Blues Progressions – Theory and Practice &#39;, &#39;Blues Scales &#39;, &#39;Keyboard Realization &#39;, &#39;“Bird” Blues and Other Blues Progressions&#39;, &#39;Improvisational Tools &#39;, &#39;Improvising the Blues – Part 1 &#39;, &#39;Improvising the Blues – Part 2&#39;]
+## 6                                                                                                                                   [&#39;Module 1: The Many Dimensions of Tango and Tango Music&#39;, &#39;Module 2: Tango Words and Movements&#39;]
+##                                                                             Instructor
+## 1 [&#39;Anna Burckhardt&#39;, &#39;Paola Antonelli&#39;, &#39;Michelle Millar Fisher&#39;, &#39;Stephanie Kramer&#39;]
+## 2                                                                      [&#39;Cary Nelson&#39;]
+## 3                                               [&#39;Andrew Dennis&#39;, &#39;Ricardo Guimaraes&#39;]
+## 4                                                        [&#39;Eduardo de la Vara Brown.&#39;]
+## 5                                                                [&#39;Dariusz Terefenko&#39;]
+## 6                                                                 [&#39;Kristin Wendland&#39;]
+##                                          offered             Keyword
+## 1                   [&#39;The Museum of Modern Art&#39;] Arts and Humanities
+## 2 [&#39;University of Illinois at Urbana-Champaign&#39;] Arts and Humanities
+## 3                  [&#39;Michigan State University&#39;] Arts and Humanities
+## 4                       [&#39;SAE Institute México&#39;] Arts and Humanities
+## 5                    [&#39;University of Rochester&#39;] Arts and Humanities
+## 6                           [&#39;Emory University&#39;] Arts and Humanities
+##                                                                              URL
+## 1                                  https://www.coursera.org/learn/fashion-design
+## 2                          https://www.coursera.org/learn/modern-american-poetry
+## 3                           https://www.coursera.org/learn/pixel-art-video-games
+## 4 https://www.coursera.org/learn/distribucion-digital-de-la-musica-independiente
+## 5                                       https://www.coursera.org/learn/the-blues
+## 6                                           https://www.coursera.org/learn/tango</code></pre>
+<pre class="r"><code>clean_sign_func &lt;- function(input_df, colname, sign1, sign2 = &quot;&quot;, sign3 = &quot;&quot;) {
+  input_df[, colname] &lt;- sapply(input_df[, colname], function(x) {
+    x &lt;- gsub(paste0(fixed(sign1), &quot;|&quot;, fixed(sign2), &quot;|&quot;, fixed(sign3)), &quot;&quot;, x)
+  })
+  return(input_df)
+}
+
+# Apply function
+orig_df &lt;- clean_sign_func(orig_df, &quot;skill&quot;, &quot;\\[&quot;, &quot;\\]&quot;, &quot;&#39;&quot;)
+orig_df &lt;- clean_sign_func(orig_df, &quot;Modules&quot;, &quot;\\[&quot;, &quot;\\]&quot;, &quot;&#39;&quot;)
+orig_df &lt;- clean_sign_func(orig_df, &quot;Instructor&quot;, &quot;\\[&quot;, &quot;\\]&quot;, &quot;&#39;&quot;)
+orig_df &lt;- clean_sign_func(orig_df, &quot;offered&quot;, &quot;\\[&quot;, &quot;\\]&quot;, &quot;&#39;&quot;)</code></pre>
+<p>After removing signs, there are empty entries so we will use
+<code>clean_empty_func</code>:</p>
+</div>
+<div id="cleaning-duration-column" class="section level3">
+<h3>7. Cleaning <strong><em>Duration</em></strong> column</h3>
+<p>Having a look at <code>Duration</code> column, we see there is
+inconsistency how data is structure. Therefore, we will change these
+into single unit <code>hour</code>.</p>
+<pre class="r"><code>orig_df %&gt;% head(20) %&gt;% select(Duration)</code></pre>
+<pre><code>##                        Duration
+## 1      20 hours (approximately)
+## 2  Approx. 34 hours to complete
+## 3       9 hours (approximately)
+## 4   Approx. 8 hours to complete
+## 5  Approx. 11 hours to complete
+## 6   Approx. 5 hours to complete
+## 7  Approx. 13 hours to complete
+## 8  Approx. 23 hours to complete
+## 9   Approx. 5 hours to complete
+## 10 Approx. 44 hours to complete
+## 11     10 hours (approximately)
+## 12 Approx. 26 hours to complete
+## 13 Approx. 12 hours to complete
+## 14     10 hours (approximately)
+## 15 Approx. 21 hours to complete
+## 16      6 hours (approximately)
+## 17               No information
+## 18 Approx. 11 hours to complete
+## 19 Approx. 21 hours to complete
+## 20 Approx. 17 hours to complete</code></pre>
+<p>Have a look at unique values for <code>Duration</code>:</p>
+<pre class="r"><code>unique(orig_df$Duration)</code></pre>
+<pre><code>##   [1] &quot;20 hours (approximately)&quot;                                                                       
+##   [2] &quot;Approx. 34 hours to complete&quot;                                                                   
+##   [3] &quot;9 hours (approximately)&quot;                                                                        
+##   [4] &quot;Approx. 8 hours to complete&quot;                                                                    
+##   [5] &quot;Approx. 11 hours to complete&quot;                                                                   
+##   [6] &quot;Approx. 5 hours to complete&quot;                                                                    
+##   [7] &quot;Approx. 13 hours to complete&quot;                                                                   
+##   [8] &quot;Approx. 23 hours to complete&quot;                                                                   
+##   [9] &quot;Approx. 44 hours to complete&quot;                                                                   
+##  [10] &quot;10 hours (approximately)&quot;                                                                       
+##  [11] &quot;Approx. 26 hours to complete&quot;                                                                   
+##  [12] &quot;Approx. 12 hours to complete&quot;                                                                   
+##  [13] &quot;Approx. 21 hours to complete&quot;                                                                   
+##  [14] &quot;6 hours (approximately)&quot;                                                                        
+##  [15] &quot;No information&quot;                                                                                 
+##  [16] &quot;Approx. 17 hours to complete&quot;                                                                   
+##  [17] &quot;Approx. 14 hours to complete&quot;                                                                   
+##  [18] &quot;Approx. 16 hours to complete&quot;                                                                   
+##  [19] &quot;18 hours (approximately)&quot;                                                                       
+##  [20] &quot;Approx. 27 hours to complete&quot;                                                                   
+##  [21] &quot;Approx. 52 hours to complete&quot;                                                                   
+##  [22] &quot;2 months at 10 hours a week&quot;                                                                    
+##  [23] &quot;1 months at 10 hours a week&quot;                                                                    
+##  [24] &quot;15 hours (approximately)&quot;                                                                       
+##  [25] &quot;Approx. 19 hours to complete&quot;                                                                   
+##  [26] &quot;5 months at 4 hours a week&quot;                                                                     
+##  [27] &quot;Approx. 9 hours to complete&quot;                                                                    
+##  [28] &quot;16 hours (approximately)&quot;                                                                       
+##  [29] &quot;Approx. 24 hours to complete&quot;                                                                   
+##  [30] &quot;Approx. 93 hours to complete&quot;                                                                   
+##  [31] &quot;5 hours (approximately)&quot;                                                                        
+##  [32] &quot;Approx. 127 hours to complete&quot;                                                                  
+##  [33] &quot;8 hours (approximately)&quot;                                                                        
+##  [34] &quot;13 hours (approximately)&quot;                                                                       
+##  [35] &quot;Approx. 25 hours to complete&quot;                                                                   
+##  [36] &quot;Approx. 15 hours to complete&quot;                                                                   
+##  [37] &quot;Approx. 65 hours to complete&quot;                                                                   
+##  [38] &quot;11 hours (approximately)&quot;                                                                       
+##  [39] &quot;Approx. 45 hours to complete&quot;                                                                   
+##  [40] &quot;19 hours (approximately)&quot;                                                                       
+##  [41] &quot;17 hours (approximately)&quot;                                                                       
+##  [42] &quot;Approx. 20 hours to complete&quot;                                                                   
+##  [43] &quot;Approx. 36 hours to complete&quot;                                                                   
+##  [44] &quot;Approx. 10 hours to complete&quot;                                                                   
+##  [45] &quot;Approx. 7 hours to complete&quot;                                                                    
+##  [46] &quot;Approx. 40 hours to complete&quot;                                                                   
+##  [47] &quot;25 hours (approximately)&quot;                                                                       
+##  [48] &quot;Approx. 6 hours to complete&quot;                                                                    
+##  [49] &quot;24 hours (approximately)&quot;                                                                       
+##  [50] &quot;40 hours (approximately)&quot;                                                                       
+##  [51] &quot;22 hours (approximately)&quot;                                                                       
+##  [52] &quot;Approx. 18 hours to complete&quot;                                                                   
+##  [53] &quot;Approx. 4 hours to complete&quot;                                                                    
+##  [54] &quot;Approx. 3 hours to complete&quot;                                                                    
+##  [55] &quot;7 hours (approximately)&quot;                                                                        
+##  [56] &quot;14 hours (approximately)&quot;                                                                       
+##  [57] &quot;Approx. 22 hours to complete&quot;                                                                   
+##  [58] &quot;12 hours (approximately)&quot;                                                                       
+##  [59] &quot;Approx. 30 hours to complete&quot;                                                                   
+##  [60] &quot;23 hours (approximately)&quot;                                                                       
+##  [61] &quot;Approx. 29 hours to complete&quot;                                                                   
+##  [62] &quot;3 hours&quot;                                                                                        
+##  [63] &quot;27 hours (approximately)&quot;                                                                       
+##  [64] &quot;Approx. 33 hours to complete&quot;                                                                   
+##  [65] &quot;1 hour&quot;                                                                                         
+##  [66] &quot;Approx. 94 hours to complete&quot;                                                                   
+##  [67] &quot;Approx. 38 hours to complete&quot;                                                                   
+##  [68] &quot;Approx. 32 hours to complete&quot;                                                                   
+##  [69] &quot;Approx. 28 hours to complete&quot;                                                                   
+##  [70] &quot;Approx. 2 hours to complete&quot;                                                                    
+##  [71] &quot;2 hours&quot;                                                                                        
+##  [72] &quot;1.5 hours&quot;                                                                                      
+##  [73] &quot;Approx. 47 hours to complete&quot;                                                                   
+##  [74] &quot;21 hours (approximately)&quot;                                                                       
+##  [75] &quot;Approx. 88 hours to complete&quot;                                                                   
+##  [76] &quot;Approx. 39 hours to complete&quot;                                                                   
+##  [77] &quot;35 hours (approximately)&quot;                                                                       
+##  [78] &quot;Approx. 1 hour to complete&quot;                                                                     
+##  [79] &quot;26 hours (approximately)&quot;                                                                       
+##  [80] &quot;33 hours (approximately)&quot;                                                                       
+##  [81] &quot;Approx. 46 hours to complete&quot;                                                                   
+##  [82] &quot;Approx. 37 hours to complete&quot;                                                                   
+##  [83] &quot;6 months at 10 hours a week&quot;                                                                    
+##  [84] &quot;Approx. 31 hours to complete&quot;                                                                   
+##  [85] &quot;3 months at 10 hours a week&quot;                                                                    
+##  [86] &quot;8 months at 10 hours a week&quot;                                                                    
+##  [87] &quot;1 hour 30 minutes&quot;                                                                              
+##  [88] &quot;1 week of study, 2 hours&quot;                                                                       
+##  [89] &quot;4 months at 10 hours a week&quot;                                                                    
+##  [90] &quot;2.5 hours&quot;                                                                                      
+##  [91] &quot;5 months at 6 hours a week&quot;                                                                     
+##  [92] &quot;7 months at 3 hours a week&quot;                                                                     
+##  [93] &quot;1 months at 6 hours a week&quot;                                                                     
+##  [94] &quot;6 months at 5 hours a week&quot;                                                                     
+##  [95] &quot;29 hours (approximately)&quot;                                                                       
+##  [96] &quot;3 hours (approximately)&quot;                                                                        
+##  [97] &quot;31 hours (approximately)&quot;                                                                       
+##  [98] &quot;7 months at 10 hours a week&quot;                                                                    
+##  [99] &quot;3 months at 5 hours a week&quot;                                                                     
+## [100] &quot;28 hours (approximately)&quot;                                                                       
+## [101] &quot;1.5 hours  &quot;                                                                                    
+## [102] &quot;4 months at 2 hours a week&quot;                                                                     
+## [103] &quot;Approx. 41 hours to complete&quot;                                                                   
+## [104] &quot;one hour&quot;                                                                                       
+## [105] &quot;Approx. 82 hours to complete&quot;                                                                   
+## [106] &quot;30 hours (approximately)&quot;                                                                       
+## [107] &quot;32 hours (approximately)&quot;                                                                       
+## [108] &quot;1 hour &quot;                                                                                        
+## [109] &quot;5 months at 10 hours a week&quot;                                                                    
+## [110] &quot;34 hours (approximately)&quot;                                                                       
+## [111] &quot;3 months at 3 hours a week&quot;                                                                     
+## [112] &quot;3 months at 6 hours a week&quot;                                                                     
+## [113] &quot;49 hours (approximately)&quot;                                                                       
+## [114] &quot;4 months at 4 hours a week&quot;                                                                     
+## [115] &quot;2 hours 30 mins&quot;                                                                                
+## [116] &quot;2 months at 4 hours a week&quot;                                                                     
+## [117] &quot;1 months at 3 hours a week&quot;                                                                     
+## [118] &quot;Approx. 69 hours to complete&quot;                                                                   
+## [119] &quot;Approx. 35 hours to complete&quot;                                                                   
+## [120] &quot;4 hours (approximately)&quot;                                                                        
+## [121] &quot;2 hours (approximately)&quot;                                                                        
+## [122] &quot;15 months at 7 hours a week&quot;                                                                    
+## [123] &quot;43 hours (approximately)&quot;                                                                       
+## [124] &quot;1 hour (approximately)&quot;                                                                         
+## [125] &quot;Approx. 60 hours to complete&quot;                                                                   
+## [126] &quot;6 months at 7 hours a week&quot;                                                                     
+## [127] &quot;39 hours (approximately)&quot;                                                                       
+## [128] &quot;7 months at 6 hours a week&quot;                                                                     
+## [129] &quot;41 hours (approximately)&quot;                                                                       
+## [130] &quot;37 hours (approximately)&quot;                                                                       
+## [131] &quot;8 months at 6 hours a week&quot;                                                                     
+## [132] &quot;6 months at 6 hours a week&quot;                                                                     
+## [133] &quot;Approx. 58 hours to complete&quot;                                                                   
+## [134] &quot;Approx. 42 hours to complete&quot;                                                                   
+## [135] &quot;Approx. 80 hours to complete&quot;                                                                   
+## [136] &quot;4 months at 5 hours a week&quot;                                                                     
+## [137] &quot;57 hours (approximately)&quot;                                                                       
+## [138] &quot;4 months at 15 hours a week&quot;                                                                    
+## [139] &quot;Approx. 89 hours to complete&quot;                                                                   
+## [140] &quot;Approx. 56 hours to complete&quot;                                                                   
+## [141] &quot;3 months at 9 hours a week&quot;                                                                     
+## [142] &quot;Approx. 43 hours to complete&quot;                                                                   
+## [143] &quot;42 hours (approximately)&quot;                                                                       
+## [144] &quot;36 hours (approximately)&quot;                                                                       
+## [145] &quot;1 months at 5 hours a week&quot;                                                                     
+## [146] &quot;5 months at 5 hours a week&quot;                                                                     
+## [147] &quot;Approx. 59 hours to complete&quot;                                                                   
+## [148] &quot;66 hours (approximately)&quot;                                                                       
+## [149] &quot;Approx. 61 hours to complete&quot;                                                                   
+## [150] &quot;Approx. 74 hours to complete&quot;                                                                   
+## [151] &quot;45 hours (approximately)&quot;                                                                       
+## [152] &quot;4 months at 3 hours a week&quot;                                                                     
+## [153] &quot;38 hours (approximately)&quot;                                                                       
+## [154] &quot;3 months at 2 hours a week&quot;                                                                     
+## [155] &quot;54 hours (approximately)&quot;                                                                       
+## [156] &quot;55 hours (approximately)&quot;                                                                       
+## [157] &quot;50 hours (approximately)&quot;                                                                       
+## [158] &quot;Approx. 49 hours to complete&quot;                                                                   
+## [159] &quot;122 hours (approximately)&quot;                                                                      
+## [160] &quot;56 hours (approximately)&quot;                                                                       
+## [161] &quot;1 hour and 30 minutes&quot;                                                                          
+## [162] &quot;52 hours (approximately)&quot;                                                                       
+## [163] &quot;4 months at 9 hours a week&quot;                                                                     
+## [164] &quot;Approx. 66 hours to complete&quot;                                                                   
+## [165] &quot;12 months at 10 hours a week&quot;                                                                   
+## [166] &quot;8 months at 7 hours a week&quot;                                                                     
+## [167] &quot;Approx. 71 hours to complete&quot;                                                                   
+## [168] &quot;Approx. 75 hours to complete&quot;                                                                   
+## [169] &quot;Approx. 48 hours to complete&quot;                                                                   
+## [170] &quot;Approx. 70 hours to complete&quot;                                                                   
+## [171] &quot;Approx. 57 hours to complete&quot;                                                                   
+## [172] &quot;Approx. 53 hours to complete&quot;                                                                   
+## [173] &quot;6 months at 3 hours a week&quot;                                                                     
+## [174] &quot;3 months at 20 hours a week&quot;                                                                    
+## [175] &quot;Approx. 95 hours to complete&quot;                                                                   
+## [176] &quot;6 months at 2 hours a week&quot;                                                                     
+## [177] &quot;5 months at 8 hours a week&quot;                                                                     
+## [178] &quot;2 months at 5 hours a week&quot;                                                                     
+## [179] &quot;6 months at 8 hours a week&quot;                                                                     
+## [180] &quot;2 months at 2 hours a week&quot;                                                                     
+## [181] &quot;Approx. 77 hours to complete&quot;                                                                   
+## [182] &quot;62 hours (approximately)&quot;                                                                       
+## [183] &quot;Approx. 63 hours to complete&quot;                                                                   
+## [184] &quot;This project should take approximately two hours to complete including, Videos, Tasks, and Quiz&quot;
+## [185] &quot;1 hour and 15 minutes&quot;                                                                          
+## [186] &quot;1 hour and 20 minutes&quot;                                                                          
+## [187] &quot;1.5 hours &quot;                                                                                     
+## [188] &quot;44 hours (approximately)&quot;                                                                       
+## [189] &quot;1 hour 15 minutes&quot;                                                                              
+## [190] &quot;1 hours&quot;                                                                                        
+## [191] &quot;1.25 hours&quot;                                                                                     
+## [192] &quot;64 hours (approximately)&quot;                                                                       
+## [193] &quot;3 months at 4 hours a week&quot;                                                                     
+## [194] &quot;58 hours (approximately)&quot;                                                                       
+## [195] &quot;46 hours (approximately)&quot;                                                                       
+## [196] &quot;53 hours (approximately)&quot;                                                                       
+## [197] &quot;1.25 hours &quot;                                                                                    
+## [198] &quot;1.2 hours&quot;                                                                                      
+## [199] &quot;Approx. 133 hours to complete&quot;                                                                  
+## [200] &quot;1-2 hours&quot;                                                                                      
+## [201] &quot;48 hours (approximately)&quot;                                                                       
+## [202] &quot;1 hour 15 mins&quot;                                                                                 
+## [203] &quot;2 hours, 15 minutes&quot;                                                                            
+## [204] &quot;6 months at 4 hours a week&quot;                                                                     
+## [205] &quot;Approx. 85 hours to complete&quot;                                                                   
+## [206] &quot;3 months at 15 hours a week&quot;                                                                    
+## [207] &quot;Approx. 68 hours to complete&quot;                                                                   
+## [208] &quot;60 hours (approximately)&quot;                                                                       
+## [209] &quot;Approx. 103 hours to complete&quot;                                                                  
+## [210] &quot;65 hours (approximately)&quot;                                                                       
+## [211] &quot;1.5 hour&quot;                                                                                       
+## [212] &quot;1 hour 10 mins&quot;                                                                                 
+## [213] &quot;Approx. 55 hours to complete&quot;                                                                   
+## [214] &quot;Approx. 50 hours to complete&quot;                                                                   
+## [215] &quot;2 months at 8 hours a week&quot;                                                                     
+## [216] &quot;Approx. 73 hours to complete&quot;</code></pre>
+<p>We can see that there are empty ones, <code>approx</code> or
+<code>approximately</code>, <code>hours</code>, <code>minutes</code>,
+<code>week</code>, and <code>month</code>. There is one entry with a
+full sentence, which is the longest entry. There is entry with
+<code>one hour</code> which does not use digit but letters. Steps to
+clean include:</p>
+<ul>
+<li>Replace the longest one with a correct one with function
+<code>which.max</code></li>
+<li>Replace the letters but not digit with a correct one with
+<code>which</code> to find the row index</li>
+</ul>
 </div>
 </div>
 <div id="improvements-to-make" class="section level2">
