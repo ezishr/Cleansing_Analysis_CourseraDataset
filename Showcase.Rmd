@@ -1,7 +1,7 @@
 ---
 title: "Coursera Data Analysis"
 author: "Eirlys Vo"
-date: "2024-08-28"
+date: "2024-08-30"
 output:
   html_document: default
 ---
@@ -13,17 +13,17 @@ knitr::clean_cache()
 
 ## Objective
 
-The goal of this project is to perform a comprehensive analysis of a dataset related to Coursera courses. I explored the dataset to understand the data structure and performed necessary data cleansing. Then, I created visualizations to see insights for online studying trends and user engagement.
+The goal of this project is to perform a comprehensive analysis of a data set related to Coursera courses. I explored the dataset to understand the data structure and performed necessary data cleansing. Then, I created visualizations to see insights for online studying trends and user engagement.
 
 ## Data Collection
 
 The data is provided on Kaggle, which can be viewed [here.](https://www.kaggle.com/datasets/elvinrustam/coursera-dataset)
 
-There are two datasets which are cleaned and uncleaned. For this project, I will only use the uncleaned version since our aim includes data cleansing. The dataset includes various columns which are basic information about a course. I will use `URL` link as our main unique index, which I will also clean on this in the **Project Workflow** section.
+There are two data sets which are cleaned and uncleaned. For this project, I will only use the uncleaned version since our aim includes data cleansing. The dataset includes various columns which are basic information about a course. I will use `URL` link as our main unique index, which I will also clean on this in the **Project Workflow** section.
 
-Further dataset description can be read [here.](https://www.kaggle.com/datasets/elvinrustam/coursera-dataset)
+Further data set description can be read [here.](https://www.kaggle.com/datasets/elvinrustam/coursera-dataset)
 
-First, I will read the dataset using `read.csv` function, save as `unclean_data`, and see an overview of the dataset:
+First, we will read the data set using `read.csv` function, save as `unclean_data`, and see an overview of the data set:
 
 ```{r}
 orig_df <- read.csv("CourseraDataset-Unclean.csv")
@@ -33,12 +33,13 @@ colnames(orig_df)
 
 ## Libraries and Tools
 
-I will set up necessary libraries that can help me clean and visualize data in further steps:
+We will set up necessary libraries that can help me clean and visualize data in further steps:
 
 ```{r}
 library(tidyverse)
 library(zoo)
 library(textcat)
+library(reshape2)
 sessionInfo()
 ```
 
@@ -46,7 +47,7 @@ sessionInfo()
 
 ### 1. Set columns name
 
-The dataset has some columns' names which I find them hard to use throughout the workflow. Therefore, I would rather change them into easily accessible names. I will use the `rename` function to apply new columns' names:
+The dataset has some columns' names which we find them hard to use throughout the workflow. Therefore, we would rather change them into easily accessible names. We will use the `rename` function to apply new columns' names:
 
 ```{r}
 orig_df <- rename(orig_df, crs_title = "Course.Title")
@@ -68,7 +69,7 @@ head(orig_df)
 
 ### 2. Cleansing N/A values for Rating col
 
-In cleansing process, I first want to see the amount of N/A values in every column:
+In cleansing process, we first want to see the amount of N/A values in every column:
 
 ```{r}
 colSums(is.na(orig_df))
@@ -228,26 +229,209 @@ orig_df %>% head(20) %>% select(Duration)
 Have a look at unique values for `Duration`:
 
 ```{r}
-unique(orig_df$Duration)
+unique(orig_df$Duration) %>% head(10)
 ```
 
 We can see that there are empty ones, `approx` or `approximately`, `hours`, `minutes`, `week`, and `month`. There is one entry with a full sentence, which is the longest entry. There is entry with `one hour` which does not use digit but letters. Steps to clean include:
 
 -   Replace the longest one with a correct one with function `which.max`
 -   Replace the letters but not digit with a correct one with `which` to find the row index
-- Delete `approximate` using `pprox` as regular expression
+-   Delete `approximate` using `pprox` as regular expression
 
 First, we get entries having `pprox` into a new data frame:
+
 ```{r}
 approx_rows <- orig_df[which(str_detect(orig_df$Duration, "pprox")), c("Duration", "URL")]
-approx_rows[which.max(nchar(approx_rows$Duration)), "Duration"] <- "2 hours"
-unique(approx_rows)
+approx_rows[which.max(nchar(approx_rows$Duration)), "Duration"] <- "2"
+unique(approx_rows) %>% head(20)
 ```
+
 Since there is only hours estimate, it is easy for us to remove all the characters and add `hours` at the end of these entries.
+
 ```{r}
 approx_rows[, "Duration"] <- gsub("[^0-9]", "", approx_rows[, "Duration"])
-approx_rows[, "Duration"] <- paste0(approx_rows[, "Duration"], " hours")
 ```
-There are entries having consistent format of `<number> month(s) at <number> hours a week`. We will convert all these into single number of months and get rid 
+
+There are entries having consistent format of `<number> month(s) at <number> hours a week`. We will convert all these into single number of months and get rid
+
+```{r}
+matches <- grepl("pprox", orig_df$Duration)
+orig_df[matches, "Duration"] <- approx_rows$Duration
+orig_df[which(orig_df$Duration == "one hour"), "Duration"] <- "1"
+```
+
+To make sure we don't have any whitespace during the cleansing process for `Duration` until now, we will trim it:
+
+```{r}
+for (col_name in colnames(orig_df)){
+  orig_df[[col_name]] <- trimws(orig_df[[col_name]])
+}
+```
+
+Take a look at unique values for `Duration` column again, we can see there are amount of entries having similar format `<digits> months at <digits> hours per/a week`. We will build a function to extract the number for months, hours, and minutes. We have 2 parameters: `value` and `request`. The `request` is presented for further purpose of calculating total number of hours for other entries. The two input options for `request` are `total_hours` and `convert_hours`:
+
+```{r}
+duration_func <- function(value, request) {
+  if (grepl("^\\d+$", value)) {return(as.numeric(value))}
+  else if(value != 'No information'){
+    
+    hours <- as.numeric((
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+hours?\\b)")
+    ))
+    minutes <- as.numeric((
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+min(ute)?s?\\b)")
+    ))
+    months <- as.numeric((
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+months?\\b)")
+    ))
+    
+    hours <- ifelse(is.na(hours),0,hours)
+    minutes <- ifelse(is.na(minutes),0,minutes)
+    months <- ifelse(is.na(months),0,months)
+    
+    if (request == 'total_hours') {
+      total_hours <- hours + minutes/60 + months*720
+      return(round(total_hours,2))
+      } else if (request == 'convert_hours') {
+        
+        if(months == 0){
+        return(hours)
+        
+      } else {
+        
+        return (hours*months*4)
+        
+      }
+    } else {
+      return (0)
+    }
+  } else if (value == 'No information') {
+    return (0)
+    }
+  
+  return (value)
+  
+}
+
+orig_df <- orig_df %>% mutate(
+  Duration = sapply(Duration, duration_func, request = 'convert_hours')
+)
+
+orig_df <- orig_df %>% mutate(
+  Duration = sapply(Duration, duration_func, request = 'total_hours')
+)
+
+orig_df$Duration <- as.double(orig_df$Duration)
+```
+
+Have a look at summary of current data set, top 10 rows and bottom 10 rows:
+
+```{r}
+summary(orig_df)
+```
+
+```{r}
+orig_df %>% head(10)
+```
+
+```{r}
+orig_df %>% tail(10)
+```
+
+```{r}
+colSums(is.na(orig_df))
+orig_df <- clean_NA_func(orig_df,'Review',0)
+```
+
+```{r}
+colSums(orig_df == '')
+for (col in c('skill', 'Modules', 'Instructor')) {
+  orig_df <- clean_empty_func(orig_df, col, 'No information')
+}
+```
+
+## Visualizations
+
+### 1.Number of course vs. Level
+
+We will count the number of courses offered in different levels to see if Coursera is offering centrally to any specific level:
+
+```{r fig.width = 8, fig.height = 6}
+df_count <- orig_df %>% count(Level)
+df_count <- df_count %>% mutate(
+  Level = reorder(Level, -n)
+)
+
+ggplot(df_count, aes(x = Level, y=n, fill = Level)) +
+  geom_bar(stat='identity') +
+  labs(y = "Course count") +
+  ggtitle("Courses vs. Level")
+```
+
+The `Beginner` level accounts most courses from Coursera so this platform is a good source for any one in this level.
+
+### 2. Count of offered
+
+```{r fig.width = 12, fig.height = 6}
+sample <- orig_df %>% count(offered) %>% arrange(desc(n)) %>% head(5)
+ggplot(sample, aes(x = offered, y = n, fill = offered)) +
+  geom_col() + 
+  ggtitle('Top 5 Sources Offering') + 
+  labs(x = 'Source Offer', y = 'Count', fill = 'Source Offer')
+```
+
+### 3. Number of Courses vs. Ratings
+
+```{r fig.width = 8, fig.height = 6}
+orig_df$Rating <- as.double(orig_df$Rating)
+ranges <- c(0, 1.0, 2.0, 3.0, 4.0, 5.1)
+orig_df$ranges <- cut(orig_df$Rating, breaks = ranges, labels = c("0-1.0", "1.1-2.0", "2.1-3.0", "3.1-4.0", "4.1-5.0"), right = FALSE)
+orig_df[which(is.na(orig_df$Review)), "Review"] <- 0
+df_rating <- as.data.frame(count(orig_df, ranges))
+
+ggplot(df_rating, aes(x = ranges, y = n, fill = ranges)) +
+  geom_col() +
+  labs(x = "Rating ranges", y = "Courses", fill = "Rating ranges") +
+  ggtitle("Course vs. Rating")
+```
+
+### 4. Average Time Spent for a Course by Level
+
+```{r fig.width = 8, fig.height = 6}
+average_time_df <- orig_df %>% group_by(Level) %>%
+  summarize(average_time = mean(Duration))
+ggplot(average_time_df, aes(x=Level, y=average_time, fill=Level)) +
+  geom_col() + 
+  labs(title='Average Time Spent for a Course by Level', y='Average Time')
+```
+
+### 5. Distribution of Courses by Level and Rating Ranges
+
+```{r fig.width = 8, fig.height = 6}
+df_count <- orig_df %>% count(Level, ranges)
+level_ranges_wideFormat <- dcast(df_count, Level ~ ranges, value.var = 'n')
+level_ranges_matrix <- as.matrix(level_ranges_wideFormat[,-1])
+rownames(level_ranges_matrix) <- level_ranges_wideFormat$Level
+level_ranges_matrix <- melt(level_ranges_matrix, varnames=c("Level","Ranges"), value.name = 'Count')
+
+ggplot(level_ranges_matrix, aes(x=Level, y=Ranges, fill=Count)) +
+  geom_tile() +
+  geom_text(aes(label=Count), color='black') +
+  scale_fill_gradient(low='lightblue', high='blue', na.value='white') +
+  labs(y='Rating Ranges', title='Distribution of Courses by Level and Rating Ranges')
+```
 
 ## Improvements to make
+
+The custom function such as `duration_func` can be adjusted to be more flexible on `request` parameter. There can be more analysis on relationships between features, given that further cleansing methods on Instructor performed.
+
+## Contact
+
+For any questions or feedback, please reach out to:
+
+-   Name: Eirlys Vo
+-   Email: [vopq\@mail.uc.edu](mailto:vopq@mail.uc.edu)
+-   GitHub: [ezishr](https://github.com/ezishr)
+-   LinkedIn: [Eirlys Vo](https://www.linkedin.com/in/phiquyvo/)
+
+Feel free to open an issue or submit a pull request if you have suggestions or improvements!

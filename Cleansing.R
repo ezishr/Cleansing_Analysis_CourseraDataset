@@ -276,10 +276,9 @@ approx_rows <- df[which(str_detect(df$Duration, "pprox")), c("Duration", "URL")]
 view(approx_rows)
 unique(approx_rows$Duration)
 ## Change the longest row to n
-approx_rows[which.max(nchar(approx_rows$Duration)), "Duration"] <- "2 hours"
+approx_rows[which.max(nchar(approx_rows$Duration)), "Duration"] <- "2"
 ## Delete all letter chars in Duration and add word "hours"
 approx_rows[, "Duration"] <- gsub("[^0-9]", "", approx_rows[, "Duration"])
-approx_rows[, "Duration"] <- paste0(approx_rows[, "Duration"], " hours")
 ## Add new column named category
 approx_rows <- approx_rows %>% mutate(
   category = "Approximately"
@@ -293,11 +292,12 @@ view(df)
 unique(df$Duration)
 df[which(df$Duration == "one hour"), "Duration"] <- "1 hour"
 
-# NEED FIX FROM HERE Aug 29th ------------------------------------------------------
+## Convert and Calculate durations to all 'hours' unit--------------------------
 for (col_name in colnames(df)){
   df[[col_name]] <- trimws(df[[col_name]])
 }
 df[df$Duration=='1 hours', 'Duration'] <- '1 hour'
+
 ## Get rows having following words: month, week, at-----------------------------
 month_df <- df[which(str_detect(df$Duration, paste0(fixed("month"), "|", fixed("week"), "|", fixed(" at ")))), c("Duration", "URL", "category")]
 view(month_df)
@@ -306,19 +306,18 @@ month_df[which(month_df$Duration == "1 week of study, 2 hours"), "category"] <- 
 month_df[which(month_df$Duration == "1 week of study, 2 hours"), "Duration"] <- "14 hours"
 summary(month_df)
 
-
-
-sample_func <- function(value) {
-  
-  if(value != 'No information'){
+duration_func <- function(value, request) {
+  if (grepl("^\\d+$", value)) {return(as.numeric(value))}
+  else if(value != 'No information'){
     
     hours <- as.numeric((
       str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+hours?\\b)")
     ))
     minutes <- as.numeric((
-      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+minutes?\\b)")
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+min(ute)?s?\\b)")
     ))
-    
+# (?<=...) matches lookbehind and \\b is a boundary of a word. then \\d+ matches one or more digits. (\\.\\d+) matches dot and the following number and this is ? to see if there is that decimal or not.
+# (?=\\s+hours?\\b) matches lookahead, \\s+ matches whitespace or tab, following by hour or hours with ? after s, and finally make sure it is followed by \\b a word boundary
     months <- as.numeric((
       str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+months?\\b)")
     ))
@@ -327,36 +326,51 @@ sample_func <- function(value) {
     minutes <- ifelse(is.na(minutes),0,minutes)
     months <- ifelse(is.na(months),0,months)
     
-    if (is.na(month)){
-      return(hours)
-      }
-    else {
-      total_hours <- hours*month*4
+    if (request == 'total_hours') {
+      total_hours <- hours + minutes/60 + months*720
       return(round(total_hours,2))
+      } else if (request == 'convert_hours') {
+      
+        if(months == 0){
+        return(hours)
+        
+      } else {
+        
+        return (hours*months*4)
+        
+      }
+    } else {
+      
+      return (0)
+      
     }
   }
+  
+  return (0)
+  
 }
 
-
 month_df <- month_df %>% mutate(
-  Duration = sapply(Duration,sample_func)
+  Duration = sapply(Duration, duration_func, request = 'convert_hours')
 )
 
-
-
-month_df[which(str_detect(month_df$Duration, fixed("month"))), "Duration"] <- gsub(" month.*", "", month_df[which(str_detect(month_df$Duration, fixed("month"))), "Duration"])
 unique(month_df$Duration)
-month_df[which(!str_detect(month_df$Duration, fixed("hours"))), "Duration"] <- paste0(month_df[which(!str_detect(month_df$Duration, fixed("hours"))), "Duration"], " months")
-month_df[which(month_df$Duration == "1 months"), "Duration"] <- "1 month"
-view(month_df)
+
+## Matching back
 matching <- grepl(paste0(fixed("month"), "|", fixed("week"), "|", fixed(" at ")), df$Duration)
 df[matching, "Duration"] <- month_df$Duration
-unique(df$category)
-view(df[which(str_detect(df$Duration, fixed("month"))), ])
-df[which(str_detect(df$Duration, fixed("month"))), "category"] <- "Months"
-view(df)
+
 view(unique(df$Duration))
-## Get rows having "mins" "minutes"
+
+df <- df %>% mutate(
+  Duration = sapply(Duration, duration_func, request = 'total_hours')
+)
+
+orig_df$Duration <- df$Duration
+
+
+
+## OLD - Get rows having "mins" "minutes"-------------------------------------
 mins_df <- df[which(str_detect(
   df$Duration, paste0(fixed("min"))
 )), c("Duration", "URL")]
@@ -366,7 +380,10 @@ mins_df[which(mins_df$Duration == "1 hour 10 mins"), "Duration"] <- "1.16 hours"
 mins_df[which(mins_df$Duration == "1 hour 15 mins" | mins_df$Duration == "1 hour 15 minutes"), "Duration"] <- "1.25 hours"
 mins_df[which(mins_df$Duration == "1 hour and 20 minutes"), "Duration"] <- "1.33 hours"
 mins_df[which(mins_df$Duration == "2 hours 30 mins"), "Duration"] <- "2.5 hours"
-### Apply changes to original dataset
+
+
+
+## OLD - Apply changes to original data set--------------------------------
 matching_min <- grepl(paste0(fixed("min")), df$Duration)
 df[matching_min, "Duration"] <- mins_df$Duration
 view(unique(df[, c("Duration", "category")]))
@@ -435,46 +452,11 @@ ggplot(sample, aes(x = offered, y = n, fill = offered)) +
   ggtitle('Top 5 Sources Offering') + 
   labs(x = 'Source Offer', y = 'Count', fill = 'Source Offer')
   
-# Duration Calculation ---------------------------------------------------------
-df2 <- df
-
-for (col_name in colnames(df2)){
-  df2[[col_name]] <- trimws(df2[[col_name]])
-}
-
-df2 <- clean_sign_func(df2, 'Duration', ',')
-df2 <- clean_sign_func(df2, 'Duration', 'and ')
 
 
-total_duration <- function(value){
-  if(value != 'No information'){
-    
-    hours <- as.numeric((
-      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+hours?\\b)")
-    ))
-    # (?<=...) matches lookbehind and \\b is a boundary of a word. then \\d+ matches one or more digits. (\\.\\d+) matches dot and the following number and this is ? to see if there is that decimal or not.
-    # (?=\\s+hours?\\b) matches lookahead, \\s+ matches whitespace or tab, following by hour or hours with ? after s, and finally make sure it is followed by \\b a word boundary
-    minutes <- as.numeric((
-      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+minutes?\\b)")
-    ))
-    
-    months <- as.numeric((
-      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+months?\\b)")
-    ))
-    
-    hours <- ifelse(is.na(hours),0,hours)
-    minutes <- ifelse(is.na(minutes),0,minutes)
-    months <- ifelse(is.na(months),0,months)
-    
-    total_hours <- hours + minutes/60 + months*720
-  } else {return(0)}
-  
-  return(round(total_hours,2))
-}
 
-df2 <- df2 %>% mutate(
-  hours_spent = sapply(Duration,total_duration)
-)
+
+
 
 
 average_time_df <- df2 %>% group_by(Level) %>%
@@ -495,13 +477,4 @@ level_ratingRanges <- ggplot(level_ranges_matrix, aes(x=Level, y=Ranges, fill=Co
   scale_fill_gradient(low='lightblue', high='blue', na.value='white') +
   labs(y='Rating Ranges', title='Distribution of Courses by Level and Rating Ranges')
 
-# sample <- df %>% count(Level, ranges)
-# ggplot(sample, aes(x=Level, y=ranges, fill=n)) + 
-  # geom_tile() + 
-  # scale_fill_gradient(low='pink', high='blue', na.value = 'red')
 
-object <- '14 hours'
-regex_month <- '(?<=\\b)\\d+(\\.\\d+)?(?=\\s+months?\\b)'
-month <- str_extract(object, pattern = regex_month)
-regex_hour <- '(?<=\\b)\\d+(\\.\\d+)?(?=\\s+hours?\\b)'
-hour <- str_extract(object, pattern = regex_hour)

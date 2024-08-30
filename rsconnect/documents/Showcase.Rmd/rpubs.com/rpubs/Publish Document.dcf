@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/1214752/7283193843374c48b785b25a4e480594
+bundleId: https://api.rpubs.com/api/v1/document/1214752/7283193843374c48b785b25a4e480594
+url: http://rpubs.com/ezishr/1214752
+version: 1
