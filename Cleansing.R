@@ -292,13 +292,58 @@ df <- df[order(df$Duration), ]
 view(df)
 unique(df$Duration)
 df[which(df$Duration == "one hour"), "Duration"] <- "1 hour"
-## Get rows having following words: month, week, at
+
+# NEED FIX FROM HERE Aug 29th ------------------------------------------------------
+for (col_name in colnames(df)){
+  df[[col_name]] <- trimws(df[[col_name]])
+}
+df[df$Duration=='1 hours', 'Duration'] <- '1 hour'
+## Get rows having following words: month, week, at-----------------------------
 month_df <- df[which(str_detect(df$Duration, paste0(fixed("month"), "|", fixed("week"), "|", fixed(" at ")))), c("Duration", "URL", "category")]
 view(month_df)
 unique(month_df$Duration)
 month_df[which(month_df$Duration == "1 week of study, 2 hours"), "category"] <- "Hours"
 month_df[which(month_df$Duration == "1 week of study, 2 hours"), "Duration"] <- "14 hours"
 summary(month_df)
+
+
+
+sample_func <- function(value) {
+  
+  if(value != 'No information'){
+    
+    hours <- as.numeric((
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+hours?\\b)")
+    ))
+    minutes <- as.numeric((
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+minutes?\\b)")
+    ))
+    
+    months <- as.numeric((
+      str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+months?\\b)")
+    ))
+    
+    hours <- ifelse(is.na(hours),0,hours)
+    minutes <- ifelse(is.na(minutes),0,minutes)
+    months <- ifelse(is.na(months),0,months)
+    
+    if (is.na(month)){
+      return(hours)
+      }
+    else {
+      total_hours <- hours*month*4
+      return(round(total_hours,2))
+    }
+  }
+}
+
+
+month_df <- month_df %>% mutate(
+  Duration = sapply(Duration,sample_func)
+)
+
+
+
 month_df[which(str_detect(month_df$Duration, fixed("month"))), "Duration"] <- gsub(" month.*", "", month_df[which(str_detect(month_df$Duration, fixed("month"))), "Duration"])
 unique(month_df$Duration)
 month_df[which(!str_detect(month_df$Duration, fixed("hours"))), "Duration"] <- paste0(month_df[which(!str_detect(month_df$Duration, fixed("hours"))), "Duration"], " months")
@@ -407,7 +452,8 @@ total_duration <- function(value){
     hours <- as.numeric((
       str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+hours?\\b)")
     ))
-    
+    # (?<=...) matches lookbehind and \\b is a boundary of a word. then \\d+ matches one or more digits. (\\.\\d+) matches dot and the following number and this is ? to see if there is that decimal or not.
+    # (?=\\s+hours?\\b) matches lookahead, \\s+ matches whitespace or tab, following by hour or hours with ? after s, and finally make sure it is followed by \\b a word boundary
     minutes <- as.numeric((
       str_extract(value, "(?<=\\b)\\d+(\\.\\d+)?(?=\\s+minutes?\\b)")
     ))
@@ -454,7 +500,8 @@ level_ratingRanges <- ggplot(level_ranges_matrix, aes(x=Level, y=Ranges, fill=Co
   # geom_tile() + 
   # scale_fill_gradient(low='pink', high='blue', na.value = 'red')
 
-
-
-
-
+object <- '14 hours'
+regex_month <- '(?<=\\b)\\d+(\\.\\d+)?(?=\\s+months?\\b)'
+month <- str_extract(object, pattern = regex_month)
+regex_hour <- '(?<=\\b)\\d+(\\.\\d+)?(?=\\s+hours?\\b)'
+hour <- str_extract(object, pattern = regex_hour)

@@ -235,5 +235,19 @@ We can see that there are empty ones, `approx` or `approximately`, `hours`, `min
 
 -   Replace the longest one with a correct one with function `which.max`
 -   Replace the letters but not digit with a correct one with `which` to find the row index
+- Delete `approximate` using `pprox` as regular expression
+
+First, we get entries having `pprox` into a new data frame:
+```{r}
+approx_rows <- orig_df[which(str_detect(orig_df$Duration, "pprox")), c("Duration", "URL")]
+approx_rows[which.max(nchar(approx_rows$Duration)), "Duration"] <- "2 hours"
+unique(approx_rows)
+```
+Since there is only hours estimate, it is easy for us to remove all the characters and add `hours` at the end of these entries.
+```{r}
+approx_rows[, "Duration"] <- gsub("[^0-9]", "", approx_rows[, "Duration"])
+approx_rows[, "Duration"] <- paste0(approx_rows[, "Duration"], " hours")
+```
+There are entries having consistent format of `<number> month(s) at <number> hours a week`. We will convert all these into single number of months and get rid 
 
 ## Improvements to make
